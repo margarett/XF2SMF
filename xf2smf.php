@@ -29,14 +29,12 @@ $prefix_smf = $db_prefix;
 
 //YOU HAVE TO DEFINE THIS
 $xf_dir = '';
-
 $max_queries = 10;	//How many queries are we doing at once? There will be a pause after this
 					//a big number will hammer your server, a small number might take ages to finish :)
 
 //In my short tests, XF doesn't allow you to change your table prefix. If yours isnt't "xf_", by all means change the end of this line here:
 $prefix_xf = '`' . $db_name . '`.xf_';
 //echo $prefix_xf;
-					
 //THIS IS WHERE YOUR DEFINITIONS END
 
 //Base path of this script. Will be very handy
@@ -664,7 +662,7 @@ switch ($step)
 			unset ($data);
 			$smcFunc['db_free_result'] ($result);
 			echo $num_topics . ' topics and ' . $num_posts . ' posts were found in XF.</span><br>';
-			//This will, most likely, exceeed (by far) the max_queries we defined earlier, so let's go and honour that...
+			//This will, most likely, exceed (by far) the max_queries we defined earlier, so let's go and honour that...
 
 			$loop_counter = 0;
 			$counter = 0;
@@ -917,6 +915,190 @@ switch ($step)
 		break;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 5:
+			//Now we convert PMs
+			echo '<h2>This is the fifth step of the conversion. We will now convert Conversations(XF)/PMs(SMF)</h2><br>
+				First, let\'s trash the actual contents of SMF "personal_messages" and "pm_recipents" tables....<br>';
+			$result = $smcFunc['db_query']('', '
+					TRUNCATE TABLE ' . $prefix_smf . 'personal_messages'
+			);
+			$result = $smcFunc['db_query']('', '
+					TRUNCATE TABLE ' . $prefix_smf . 'pm_recipients'
+			);
+			echo 'PMs cleared from SMF tables. Next step, count what\'s there to move?? <span style="font-weight:bold">';
+			$query = '
+					SELECT COUNT(m.message_id) as total
+					FROM ' . $prefix_xf . 'conversation_message AS m ';
+			//echo '<pre>' . $query . '</pre>';			
+			$result = $smcFunc['db_query']('', $query
+			);
+			$data = $smcFunc['db_fetch_assoc'] ($result);
+			$num_messages = $data['total'];
+			$smcFunc['db_free_result'] ($result);
+			unset ($data);
+			echo $num_messages . ' PMs were found in XF.</span><br>';
+			//This will, most likely, exceeed (by far) the max_queries we defined earlier, so let's go and honour that...
+
+			$loop_counter = 0;
+			$counter = 0;
+			$num_loops = (int)($num_messages/$max_queries); //complete number of loops
+
+			$done = false;
+			$messages = array();
+			//a div with overflow so that the page won't scroll forever...
+			echo '<div style="width:100%;height:300px;overflow:scroll;">';
+			while (!$done)
+			{
+				$lower_limit = ($loop_counter * $max_queries); //This is the starting row
+				if ($num_loops > $loop_counter) //is this still a complete set of queries?
+					$upper_limit = $max_queries; //number of rows to return
+				else
+					$upper_limit = $num_messages - ($num_loops * $max_queries); //last trip
+
+				echo 'Now retrieving messages ' . ($lower_limit + 1) . ' to ' . ($lower_limit + $upper_limit) . '...<br>';	
+				//This is the query to retrieve topics
+				$query = '
+					SELECT
+						m.message_id AS id_pm,
+						m.conversation_id AS id_pm_head,
+						m.user_id AS id_member_from,
+						m.username AS from_name,
+						m.message_date AS msgtime,
+						c.first_message_id AS first_message_id,
+						c.title AS subject,
+						m.message AS body,
+						c.user_id AS id_starter,
+						c.last_message_user_id AS last_message_user_id,
+						c.recipients AS recipients
+					FROM ' . $prefix_xf . 'conversation_message AS m
+						LEFT JOIN ' . $prefix_xf . 'conversation_master AS c ON (m.conversation_id = c.conversation_id)
+					LIMIT ' . $lower_limit . ', ' . $upper_limit;
+				//echo '<pre>' . $query . '</pre>';
+				
+				$request = $smcFunc['db_query']('', $query);
+
+				while ($row = $smcFunc['db_fetch_assoc']($request))
+				{
+					$messages[] = $row;
+				}
+				$smcFunc['db_free_result']($request);
+				// echo '<pre>';
+				// print_r ($messages);
+				// echo '</pre>';
+
+
+				//For each "batch" that we gather we need to dump it to the new table. Shall we?
+				//let's build a nice data array 
+				$messages_array = array();
+				$recipients_array = array();
+				foreach ($messages as $key => $value)
+				{
+					$messages_array[] = array(
+										'id_pm' => $value['id_pm'],
+										'id_pm_head' => $value['id_pm_head'],
+										'id_member_from' => $value['id_member_from'],
+										'deleted_by_sender' => 0, //We will all sent messages as sent 
+										'from_name' => $value['from_name'],
+										'msgtime' => $value['msgtime'],
+										//Add "Re: prefix to subject
+										'subject' => $value['id_pm'] == $value['first_message_id'] ? $value['subject'] : 'Re: ' . $value['subject'],
+										'body' => $value['body'],
+									);
+									
+					//need to build an array with the IDs of the recipients. Unfortunately they are not all in one place...
+					$recipients = array();
+					$recipients[] = $value['last_message_user_id']; //This is not in the recipients list...
+					if ($value['last_message_user_id'] != $value['id_starter']) //prevent duplicates
+						$recipients[] = $value['id_starter'];
+					$temp = unserialize($value['recipients']);
+					foreach ($temp as $key2 => $value2)
+					{
+						if (($key2 != $value['last_message_user_id']) && ($key2 != $value['id_starter'])) //prevent duplicates
+							$recipients[] = $key2;
+					}	
+					unset($temp);
+
+					// echo '<pre>';
+					// echo 'Message: ' . $value['id_pm'] . ': ';
+					// print_r($recipients);
+					// echo '</pre>';
+					
+					foreach ($recipients as $temp)
+					{
+						if ($temp != $value['id_member_from']) //We don't want to put ourselves in the destination :)
+						{
+							$recipients_array[] = array(
+											'id_pm' => $value['id_pm'],
+											'id_member' => $temp,
+											'labels' => '-1',
+											'bcc' => 0,
+											'is_read' => 1, //No new messages after conversion, sorry about that :)
+											'is_new' => 0,
+											'deleted' => 0,
+										);
+						}				
+					}
+					unset($recipients);					
+				}
+				
+				// echo '<pre>';
+				// print_r ($messages_array);
+				// print_r ($recipients_array);
+				// echo '</pre>';
+
+				//And now, fill our SMF tables :)
+				$smcFunc['db_insert']('insert',
+					$prefix_smf . 'personal_messages',
+					array(
+							'id_pm' => 'int',
+							'id_pm_head' => 'int',
+							'id_member_from' => 'int',
+							'deleted_by_sender' => 'int',
+							'from_name' => 'string',
+							'msgtime' => 'int',
+							'subject' => 'string',
+							'body' => 'string',
+						),
+					$messages_array,
+					array('id_pm')
+				);
+				$smcFunc['db_insert']('insert',
+					$prefix_smf . 'pm_recipients',
+					array(
+							'id_pm' => 'int',
+							'id_member' => 'int',
+							'labels' => 'string',
+							'bcc' => 'int',
+							'is_read' => 'int',
+							'is_new' => 'int',
+							'deleted' => 'int',
+						),
+					$recipients_array,
+					array('id_pm', 'id_member')
+				);
+
+				//flush you!
+				unset($messages_array);
+				unset($recipients_array);
+				unset($messages);
+
+					
+				$loop_counter++; //There ya go, now increase the loop counter
+				$counter += $upper_limit; //increase the elements counter. Don't forget we added "1" to lower limit!
+				
+				//Did we finish or WHAT?!
+				if ($counter >= $num_messages)
+					$done = true;
+				else
+					sleep(1);				
+			}
+			sleep(1);			
+
+			echo '</div><h2>The script finished moving ' . $num_messages . ' Private Messages from XF to SMF.<br>
+			<a href="' . $script . '?step=6">Please click here to proceed!</a></h2>';
+		break;
+		
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	case 6:
 			//We finished, for now.
 			echo '<h2>This is, for now, the end of the conversion. <br>
 					You should now login to your new SMF forum (NOTE: YOU NEED TO RECOVER YOUR PASSWORD!) and go to:</h2><br>

@@ -4,7 +4,7 @@ error_reporting(E_ALL ^ E_DEPRECATED);
 
 // Include the SSI file.
 require(dirname(__FILE__) . '/SSI.php');
-global $boarddir, $db_prefix, $db_name, $boardurl;
+global $boarddir, $db_prefix, $db_name, $boardurl, $xf_dir, $smf_dir, $smcFunc;
 
 require ($boarddir . '/Sources/DbPackages-mysql.php');
 db_packages_init(); //Extra operations in smcFunc
@@ -23,18 +23,18 @@ ob_implicit_flush(true);
 
 $prefix_smf = $db_prefix;
 //echo $prefix_smf;
+//In my short tests, XF doesn't allow you to change your table prefix. If yours isnt't "xf_", by all means change the end of this line here:
+$prefix_xf = '`' . $db_name . '`.xf_';
 //echo '<br>';
+//echo $prefix_xf;
 
-//As stated, this is NOT a "for dummies" converter, despite being developed by one :)
+//As stated, this is NOT a "for dummies" converter, despite being develped by one :)
 
 //YOU HAVE TO DEFINE THIS
 $xf_dir = '';
 $max_queries = 10;	//How many queries are we doing at once? There will be a pause after this
 					//a big number will hammer your server, a small number might take ages to finish :)
 
-//In my short tests, XF doesn't allow you to change your table prefix. If yours isnt't "xf_", by all means change the end of this line here:
-$prefix_xf = '`' . $db_name . '`.xf_';
-//echo $prefix_xf;
 //THIS IS WHERE YOUR DEFINITIONS END
 
 //Base path of this script. Will be very handy
@@ -47,10 +47,10 @@ switch ($step)
 	case 0:
 			//Let's salute people :)
 			echo '<h2>Hi there. This converter will convert (who\'d tell?) your Xenforo 1.2 to SMF 2.0.x </h2><br>
-				 Before we start, though, there are some things we need to be sure are ready to work... Let\'s list them here:<br>
+				 <h3>Before we start, though, there are some things we need to be sure are ready to work...</h3> Let\'s list them here:<br>
 				 - Your SMF installation is ready? Can you connect to it and see your "admin" user and the sample Category/Board/Topic?<br>
 				 - Did you install SMF in the SAME database where XenForo was installed?<br>
-				 - You MUST chmod 755 "avatars" folder. We need to move avatars there, right?<br>
+				 - You MUST chmod 755 "avatars" and "attachments" folder. We need to move files there, right?<br>
 				 - We need to know SMF and XF\'s folder if we are going to convert attachments, avatars, etc... PLEASE MAKE SURE THIS IS CORRECT! Some help:
 					<ul><li>SMF\'s folder: ' . $smf_dir; '</li>';
 					if (!empty($xf_dir))
@@ -74,8 +74,9 @@ switch ($step)
 				unset ($name);
 				unset ($temp);
 					  
-				echo '<h2><a href="' . $script . '?step=1">Please click here to proceed!</a></h2>';
+				echo '<h2><a href="' . $script . '?step=1">Please click here to proceed!</a></h2>';				
 		break;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////		
 	case 1:
 			echo '<h2>This is the first step of the conversion. We are trying to convert Members</h2><br>
 				First, let\'s trash the actual contents of SMF members table....<br>';
@@ -93,12 +94,39 @@ switch ($step)
 			unset ($data);
 			$smcFunc['db_free_result'] ($result);
 			echo $num_members . ' users were found in XF.</span><br>';
-			//Silently remove our maybe existent avatars folder
-			//$avatar_dir = $smf_dir . '/avatars/import';
-			// echo $avatar_dir . '<br>';
-			//unlinkRecursive($avatar_dir, true);
-			//And now lets recreate it, empty as new
-			//mkdir($avatar_dir, 0755);
+
+			//When converting members, we will want to copy their avatars. This can be a bit messy :P
+			//So, let's gather ALL avatars... nham, memory eater :)
+			$temp_avatars = getAvatars('l',0); //big avatars folder
+			//echo '<pre>';
+			//print_r($temp_avatars);
+			//The array returned from getAvatars is a BIG mess, isn't it? So, let's make this simple
+			$avatars = array();
+			foreach($temp_avatars as $key => $value)
+			{
+				$folder = $xf_dir . '/data/avatars/l/' . ($value['filename'] == 'zzz' ? '0' : $value['filename']);
+				//echo($folder) . '<br>';
+				//print_r($value);
+				//Files data 
+				foreach ($value['files'] as $key2 => $value2)
+				{
+					$filepath = $folder . '/' . $value2['filename'];
+					//images size. We don't need protection, XF should have done that for us :)
+					$sizes = @getimagesize($filepath);
+					//print_r($value2);
+					$avatars[] = array(
+									'folder' => $folder,
+									'filepath' => $filepath,
+									'name' => $value2['name'],
+									'size_width' => $sizes[0],
+									'size_height' => $sizes[1],
+								);
+				}
+			}
+			//print_r($avatars);
+			//echo '</pre>';
+			//save memory is needed
+			unset($temp_avatars);
 			
 			//Now we will copy the members from one table to another. Since it can be intensive to the server, we will do it in small steps..
 			$loop_counter = 0;
@@ -174,7 +202,6 @@ switch ($step)
 					// echo '</pre>';
 				// }
 				// unset ($temp);
-//				unset ($members);
 
 				//For each "batch" that we gather we need to dump it to the new table. Shall we?
 				//let's build a nice data array
@@ -333,7 +360,6 @@ switch ($step)
 			echo '</div><h2>The script finished moving ' . $counter . ' members from XF to SMF.<br>
 			<a href="' . $script . '?step=2">Please click here to proceed!</a></h2>';
 		break;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 2:
 			echo '<h2>This is the second step of the conversion. We are trying to convert Categories</h2><br>
@@ -1096,9 +1122,174 @@ switch ($step)
 			echo '</div><h2>The script finished moving ' . $num_messages . ' Private Messages from XF to SMF.<br>
 			<a href="' . $script . '?step=6">Please click here to proceed!</a></h2>';
 		break;
-		
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 6:
+			//Now we convert PMs
+			echo '<h2>This is the sixth step of the conversion. We will now copy and convert Post Attachments</h2><br>
+				First, let\'s trash the actual contents of SMF "attachments" table....<br>';
+			$result = $smcFunc['db_query']('', '
+					TRUNCATE TABLE ' . $prefix_smf . 'attachments'
+			);
+			echo 'Attachments table cleared. Next step, delete any existing files in the destination folder.<br>';
+			array_map('unlink', glob($smf_dir . '/attachments/*'));
+			echo 'Attachments folder is now empty. Now we will start the copy operation.<br>
+					Depending on the number of files you have, this can take some time...';
+			
+			//Damn, this will be tricky... First of all, get all the posts that DO have attachments registered to it.
+			//Or course this will exceed our "max_queries" so we should honour that
+			$last_id = 0;
+			$done = false;
+			$num_attachments = 0;
+			$num_attachments_old = 0;
+			$num_copy_errors = 0;
+			//a div with overflow so that the page won't scroll forever...
+			echo '<div style="width:100%;height:300px;overflow:scroll;">';			
+			while(!$done)
+			{
+				$query = '
+						SELECT p.post_id AS post_id,
+							p.attach_count AS attach_count
+						FROM ' . $prefix_xf . 'post AS p
+						WHERE p.attach_count > 0
+							AND p.post_id > ' . $last_id . '
+						ORDER BY p.post_id
+						LIMIT 0, ' . $max_queries;
+				//echo '<pre>' . $query . '</pre>';
+				
+				$result = $smcFunc['db_query']('', $query);
+				$temp_post_ids = array();
+				while ($row = $smcFunc['db_fetch_assoc']($result))
+				{
+					$temp_post_ids[] = $row;
+				}
+				$smcFunc['db_free_result'] ($result);
+				// echo '<pre>';
+				// print_r($temp_post_ids);
+				// echo '</pre>';
+				
+				//Let's do some heavy work...
+				if (!empty($temp_post_ids))
+				{
+					
+					reset($temp_post_ids);
+					$num_attach_cycle = count($temp_post_ids);
+					//Just something for the display...
+					$num_attachments += $num_attach_cycle;
+					echo 'Copying attachments ' . ($num_attachments_old + 1) . ' to ' . $num_attachments . '...';
+					$num_attachments_old = $num_attachments;
+					//Get the last recorded id for the next iteration
+					$last_id_temp = end($temp_post_ids);
+					$last_id = $last_id_temp['post_id'];
+					// echo '<pre>' . $last_id . '</pre>';
+					
+					
+					//For each message we will get its attachments. Probably not very efficient, but it will do the trick :)
+					foreach ($temp_post_ids as $temp)
+					{
+						// echo '<pre>';
+						// print_r($temp);
+						// echo '</pre>';
+					
+						//Get the attachments details related to this post ID
+						$query = '
+								SELECT a.attachment_id AS id_attach,
+									a.data_id AS data_id,
+									a.content_id AS id_msg,
+									a.view_count AS view_count,
+									ad.user_id AS user_id,
+									ad.filename AS filename,
+									ad.file_size AS filesize,
+									ad.file_hash AS file_hash,
+									ad.width AS width,
+									ad.height AS height
+								FROM ' . $prefix_xf . 'attachment AS a
+									INNER JOIN ' . $prefix_xf . 'attachment_data AS ad ON (ad.data_id = a.data_id)
+								WHERE a.content_type = \'post\'
+									AND a.content_id = ' . $temp['post_id'] . '
+								ORDER BY a.attachment_id';
+								
+						// echo '<pre>' . $query . '</pre>';
+						
+						$result = $smcFunc['db_query']('', $query);
+						$attach_data = array();
+						while ($row = $smcFunc['db_fetch_assoc']($result))
+						{
+							$attach_data[] = $row;
+						}
+						$smcFunc['db_free_result'] ($result);					
+						// echo '<pre>';
+						// print_r($attach_data);
+						// echo '</pre>';
+						//And, for each of the retrieved files, a LOT of things to do...
+						//Lets run yet another foreach cycle
+						foreach($attach_data as $temp2)
+						{
+							// echo '<pre>';
+							// print_r($temp2);
+							// echo '</pre>';
+							//Now, we need to get the hashed file name from XF and convert it to a lovely filename. One we can actually use, ya know? :)
+							$oriname = $xf_dir . '/internal_data/attachments/0/' . $temp2['data_id'] . '-' . $temp2['file_hash'] . '.data';
+							// echo '<pre>' . $oriname	 . '</pre>';
+							//Destination (temporary) name
+							$destname = $smf_dir . '/attachments/' . $temp2['filename'];
+							$test = copy($oriname, $destname);
+							if (!$test) //Just an error counter, can be improved but not very important for now...
+							{
+								$num_copy_errors++;
+								continue; //skip the rest of the cycle
+							}
+							
+							//Now that we've copied the file, lets add to the database. Our modified SMF function should take care of everything...
+							$attachmentOptions = array(
+								'post' => $temp2['id_msg'],
+								'poster' => $temp2['user_id'],
+								'name' => $temp2['filename'],
+								'tmp_name' => $temp2['filename'],
+								'size' => $temp2['filesize'],
+								'width' => $temp2['width'],
+								'height' => $temp2['height'],
+								'downloads' => $temp2['view_count'],
+								'approved' => 1,  
+							);
+							$test = createAttachment($attachmentOptions);
+							if (!$test)
+								$num_copy_errors++;
+							//echo '<pre>' . $test	 . '</pre>';
+							// echo '<pre>';
+							// print_r($attachmentOptions);
+							// echo '</pre>';
+							
+						
+						
+						}					
+						unset($attach_data);
+					}
+					unset($temp_post_ids);
+					//Finish the display...
+					echo 'Done<br>';
+					//Some rest to mysql...
+					sleep(1);
+				}
+				else
+					//Nothing gathered, done
+					$done = true;				
+			}
+						
+			echo '</div><h2>The script finished moving ' . $num_attachments . ' attachments from XF to SMF.<br>';
+				if ($num_copy_errors > 0) echo 'Do note, some errors were found while converting files....';
+				echo '<a href="' . $script . '?step=7">Please click here to proceed!</a></h2>';			
+		break;
+		
+		
+		
+		
+		
+		
+		
+		
+		
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	case 7:
 			//We finished, for now.
 			echo '<h2>This is, for now, the end of the conversion. <br>
 					You should now login to your new SMF forum (NOTE: YOU NEED TO RECOVER YOUR PASSWORD!) and go to:</h2><br>
@@ -1108,6 +1299,9 @@ switch ($step)
 
 
 		break;
+
+		
+
 	default:
 			echo '<h1>Ups, something went wrong, wou\'re not supposed to be here. Please start over...</h1><br>
 					<h2><a href="' . $script . '">Please click here</a>';
@@ -1117,25 +1311,282 @@ switch ($step)
 }
 
 
+/*
+			$attachmentOptions = array(
+				'post' => isset($_REQUEST['msg']) ? $_REQUEST['msg'] : 0,
+				'poster' => $user_info['id'],
+				'name' => $_FILES['attachment']['name'][$n],
+				'tmp_name' => $_FILES['attachment']['tmp_name'][$n],
+				'size' => $_FILES['attachment']['size'][$n],
+				'approved' => !$modSettings['postmod_active'] || allowedTo('post_attachment'),  
+*/
 
-//Function to delete a folder and its contents
-function unlinkRecursive($dir, $deleteRootToo)
+//Create attachment --> lame copy of the same function in Subs-Post.php
+function createAttachment(&$attachmentOptions)
 {
-    if(!$dh = @opendir($dir))
-        return;
-    while (false !== ($obj = readdir($dh)))
-    {
-        if($obj == '.' || $obj == '..')
-            continue;
- 
-        if (!@unlink($dir . '/' . $obj))
-            unlinkRecursive($dir.'/'.$obj, true);
-    }
-	closedir($dh);
+	global $smf_dir, $prefix_smf, $smcFunc;
+	require_once($smf_dir . '/Sources/Subs-Graphics.php');
+	
+	//Fixed size for thumbs. Why not?
+	$attachmentThumbWidth = 100;
+	$attachmentThumbHeight = 75;
 
-    if ($deleteRootToo)
-        @rmdir($dir);
-    return;
-}
+	// We need to know where this thing is going.
+	$attach_dir = $smf_dir . '/attachments';
+	$id_folder = 1;
+	
+	//We also need to correct the complete files path
+	//$attachmentOptions['tmp_name'] = $attach_dir . '/' . $attachmentOptions['tmp_name'];
+
+	$attachmentOptions['errors'] = array();
+	if (!isset($attachmentOptions['post']))
+		$attachmentOptions['post'] = 0;
+	if (!isset($attachmentOptions['approved']))
+		$attachmentOptions['approved'] = 1;
+
+	//$already_uploaded = preg_match('~^post_tmp_' . $attachmentOptions['poster'] . '_\d+$~', $attachmentOptions['tmp_name']) != 0;
+	$already_uploaded = 1; //Of course it is uploaded. We did it! :)
+	$file_restricted = @ini_get('open_basedir') != '' && !$already_uploaded;
+
+	if ($already_uploaded)
+		$attachmentOptions['tmp_name'] = $attach_dir . '/' . $attachmentOptions['tmp_name'];
+
+	// These are the only valid image types for SMF.
+	$validImageTypes = array(
+		1 => 'gif',
+		2 => 'jpeg',
+		3 => 'png',
+		5 => 'psd',
+		6 => 'bmp',
+		7 => 'tiff',
+		8 => 'tiff',
+		9 => 'jpeg',
+		14 => 'iff'
+	);
+
+	if (!$file_restricted || $already_uploaded)
+	{
+		//This was imported from XF
+		$size = @getimagesize($attachmentOptions['tmp_name']);
+//		list ($attachmentOptions['width'], $attachmentOptions['height']) = $size;
+
+		// If it's an image get the mime type right.
+		if (empty($attachmentOptions['mime_type']) && $attachmentOptions['width'])
+		{
+			// Got a proper mime type?
+			if (!empty($size['mime']))
+				$attachmentOptions['mime_type'] = $size['mime'];
+			// Otherwise a valid one?
+			elseif (isset($validImageTypes[$size[2]]))
+				$attachmentOptions['mime_type'] = 'image/' . $validImageTypes[$size[2]];
+		}
+	}
+
+	// create an hash for the file. 
+	$attachmentOptions['file_hash'] = sha1(md5($attachmentOptions['name'] . time()) . mt_rand());
+
+	// Assuming no-one set the extension let's take a look at it.
+	if (empty($attachmentOptions['fileext']))
+	{
+		$attachmentOptions['fileext'] = strtolower(strrpos($attachmentOptions['name'], '.') !== false ? substr($attachmentOptions['name'], strrpos($attachmentOptions['name'], '.') + 1) : '');
+		if (strlen($attachmentOptions['fileext']) > 8 || '.' . $attachmentOptions['fileext'] == $attachmentOptions['name'])
+			$attachmentOptions['fileext'] = '';
+	}
+
+	$smcFunc['db_insert']('',
+		$prefix_smf . 'attachments',
+		array(
+			'id_folder' => 'int', 'id_msg' => 'int', 'filename' => 'string-255', 'file_hash' => 'string-40', 'fileext' => 'string-8',
+			'size' => 'int', 'width' => 'int', 'height' => 'int',
+			'mime_type' => 'string-20', 'approved' => 'int', 'downloads' => 'int',
+		),
+		array(
+			$id_folder, (int) $attachmentOptions['post'], $attachmentOptions['name'], $attachmentOptions['file_hash'], $attachmentOptions['fileext'],
+			(int) $attachmentOptions['size'], (empty($attachmentOptions['width']) ? 0 : (int) $attachmentOptions['width']), (empty($attachmentOptions['height']) ? '0' : (int) $attachmentOptions['height']),
+			(!empty($attachmentOptions['mime_type']) ? $attachmentOptions['mime_type'] : ''), (int) $attachmentOptions['approved'], (int) $attachmentOptions['downloads'],
+		),
+		array('id_attach')
+	);
+	$attachmentOptions['id'] = $smcFunc['db_insert_id']($prefix_smf . 'attachments', 'id_attach');
+
+	if (empty($attachmentOptions['id']))
+		return false;
+
+
+	$attachmentOptions['destination'] = getAttachmentFilename(basename($attachmentOptions['name']), $attachmentOptions['id'], $id_folder, false, $attachmentOptions['file_hash']);
+	
+	//Now that we have a name, let's move the original to the hashed one.
+	rename($attachmentOptions['tmp_name'], $attachmentOptions['destination']);
+
+	// Attempt to chmod it. Not needed, user has to to do...
+	//@chmod($attachmentOptions['destination'], 0644);
+
+	//$size = @getimagesize($attachmentOptions['destination']);
+	//list ($attachmentOptions['width'], $attachmentOptions['height']) = empty($size) ? array(null, null, null) : $size;
+
+	// No security checks for images, XF covered us here, right? :)
+
+	if (!empty($attachmentOptions['skip_thumbnail']) || (empty($attachmentOptions['width']) && empty($attachmentOptions['height'])))
+		return true;
+
+	// Like thumbnails, do we?
+	if ($attachmentOptions['width'] > $attachmentThumbWidth || $attachmentOptions['height'] > $attachmentThumbHeight)
+	{
+		if (createThumbnail($attachmentOptions['destination'], $attachmentThumbWidth, $attachmentThumbHeight))
+		{
+			// Figure out how big we actually made it.
+			$size = @getimagesize($attachmentOptions['destination'] . '_thumb');
+			list ($thumb_width, $thumb_height) = $size;
+
+			if (!empty($size['mime']))
+				$thumb_mime = $size['mime'];
+			elseif (isset($validImageTypes[$size[2]]))
+				$thumb_mime = 'image/' . $validImageTypes[$size[2]];
+			// Lord only knows how this happened...
+			else
+				$thumb_mime = '';
+
+			$thumb_filename = $attachmentOptions['name'] . '_thumb';
+			$thumb_size = filesize($attachmentOptions['destination'] . '_thumb');
+			$thumb_file_hash = sha1(md5($thumb_filename . time()) . mt_rand());
+
+			// To the database we go!
+			$smcFunc['db_insert']('',
+				$prefix_smf . 'attachments',
+				array(
+					'id_folder' => 'int', 'id_msg' => 'int', 'attachment_type' => 'int', 'filename' => 'string-255', 'file_hash' => 'string-40', 'fileext' => 'string-8',
+					'size' => 'int', 'width' => 'int', 'height' => 'int', 'mime_type' => 'string-20', 'approved' => 'int',
+				),
+				array(
+					$id_folder, (int) $attachmentOptions['post'], 3, $thumb_filename, $thumb_file_hash, $attachmentOptions['fileext'],
+					$thumb_size, $thumb_width, $thumb_height, $thumb_mime, (int) $attachmentOptions['approved'],
+				),
+				array('id_attach')
+			);
+			$attachmentOptions['thumb'] = $smcFunc['db_insert_id']($prefix_smf . 'attachments', 'id_attach');
+
+			if (!empty($attachmentOptions['thumb']))
+			{
+				$smcFunc['db_query']('', '
+					UPDATE ' . $prefix_smf . 'attachments
+					SET id_thumb = {int:id_thumb}
+					WHERE id_attach = {int:id_attach}',
+					array(
+						'id_thumb' => $attachmentOptions['thumb'],
+						'id_attach' => $attachmentOptions['id'],
+					)
+				);
+
+				rename($attachmentOptions['destination'] . '_thumb', getAttachmentFilename($thumb_filename, $attachmentOptions['thumb'], $id_folder, false, $thumb_file_hash));
+			}
+		}
+	}
+
+	return true;
+} 
+
+// Recursive function to retrieve avatar files
+// Lame copy of Sources/Profile-Modify.php with small modifications
+function getAvatars($directory, $level)
+{
+	global $xf_dir, $smf_dir;
+	$result = array();
+
+	// Open the directory..
+	$avatar_path = $xf_dir . '/data/avatars';
+	//echo $avatar_path . '<br>';
+	$dirs = array();
+	$files = array();
+	$mem_rename = false;
+	//dir --> read fails to read the folder if a folder named "0" is there. So, if it exists, we will rename it
+	$full_path = $avatar_path . (!empty($directory) ? '/' . $directory : ''); 
+	$temp_path = $full_path . '/0';
+	//echo $full_path . '<br>';
+	//echo $temp_path . '<br>';
+	$dir = @dir($temp_path);
+	if ($dir) //If the directory exists, we rename it!!!
+	{
+		$dir->close();
+		rename($full_path . '/0', $full_path . '/zzz');
+		$mem_rename = true;
+	}
+	unset($temp_path);
+	$dir = dir($full_path);
+	
+	while ($line = $dir->read())
+	{
+		//echo $line . '<br>';
+		if (in_array($line, array('.', '..', 'blank.gif', 'index')))
+			continue;
+
+		if (is_dir($avatar_path . '/' . $directory . (!empty($directory) ? '/' : '') . $line)) 
+			$dirs[] = $line;
+		else
+			$files[] = $line;
+	}
+	$dir->close();
+	// echo '<pre>';
+	// print_r($dirs);
+	// print_r($files);
+	// echo '</pre>';
+
+
+	// Sort the results...
+	natcasesort($dirs);
+	natcasesort($files);
+
+	//We don't need this
+	// if ($level == 0)
+	// {
+		// $result[] = array(
+			// 'filename' => 'blank.gif',
+			// 'checked' => false,
+			// 'name' => '(no pic)',
+			// 'is_dir' => false
+		// );
+	// }
+
+	foreach ($dirs as $line)
+	{
+		$tmp = getAvatars($directory . (!empty($directory) ? '/' : '') . $line, $level + 1); 
+	
+		if (!empty($tmp))
+			$result[] = array(
+				'filename' => htmlspecialchars($line),
+				'checked' => true,
+				'name' => '[' . htmlspecialchars(str_replace('_', ' ', $line)) . ']',
+				'is_dir' => true,
+				'files' => $tmp
+		);
+		unset($tmp);
+	}
+
+	foreach ($files as $line)
+	{
+
+		$filename = substr($line, 0, (strlen($line) - strlen(strrchr($line, '.'))));
+		$extension = substr(strrchr($line, '.'), 1);
+		//echo $filename . '.' . $extension . '<br>';
+
+
+		// Make sure it is an image.
+		if (strcasecmp($extension, 'gif') != 0 && strcasecmp($extension, 'jpg') != 0 && strcasecmp($extension, 'jpeg') != 0 && strcasecmp($extension, 'png') != 0 && strcasecmp($extension, 'bmp') != 0)
+			continue;
+
+		$result[] = array(
+			'filename' => htmlspecialchars($line),
+			'checked' => true,
+			'name' => htmlspecialchars(str_replace('_', ' ', $filename)),
+			'is_dir' => false,
+		);
+		//if ($level == 1)
+		//	$context['avatar_list'][] = $directory . '/' . $line;
+	}
+	
+	//if we renamed the "0" folder, then set it back to normal
+	if ($mem_rename)
+		rename($full_path . '/zzz', $full_path . '/0');
+	return $result;
+} 
 
 ?>

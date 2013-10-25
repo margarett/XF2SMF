@@ -1,5 +1,17 @@
 <?php
-
+/*
+ *
+ * XenForo 1.2 to SMF 2.0.x converter
+ * author: margarett (Bruno Alves) for Simple Machines Forum
+ *
+ * license: This work is licensed under a Creative Commons Attribution 3.0 Unported License.
+	http://creativecommons.org/licenses/by/3.0/
+ *
+ * PLEASE NOTE: This is a converter from XenForo 1.2 to SMF 2.0.x. It was created using the database schema from this specific XF version.
+	Please keep in mind that I do *NOT* run any XF forum and, as such, it is possible that something is not exactly the same between your
+	version and what I've used. Just ask!
+ * 
+*/
 error_reporting(E_ALL ^ E_DEPRECATED);
 
 // Include the SSI file.

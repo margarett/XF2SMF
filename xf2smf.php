@@ -10,6 +10,8 @@
  * PLEASE NOTE: This is a converter from XenForo 1.2 to SMF 2.0.x. It was created using the database schema from this specific XF version.
 	Please keep in mind that I do *NOT* run any XF forum and, as such, it is possible that something is not exactly the same between your
 	version and what I've used. Just ask!
+ * Feel free to redistribute, modify, adapt, improve, whatever you wish. Just respect the (very) permissive license and keep this comment
+	block and respect the (extremely) permissive license.
  * 
 */
 error_reporting(E_ALL ^ E_DEPRECATED);
@@ -106,39 +108,6 @@ switch ($step)
 			unset ($data);
 			$smcFunc['db_free_result'] ($result);
 			echo $num_members . ' users were found in XF.</span><br>';
-
-			//When converting members, we will want to copy their avatars. This can be a bit messy :P
-			//So, let's gather ALL avatars... nham, memory eater :)
-			$temp_avatars = getAvatars('l',0); //big avatars folder
-			//echo '<pre>';
-			//print_r($temp_avatars);
-			//The array returned from getAvatars is a BIG mess, isn't it? So, let's make this simple
-			$avatars = array();
-			foreach($temp_avatars as $key => $value)
-			{
-				$folder = $xf_dir . '/data/avatars/l/' . ($value['filename'] == 'zzz' ? '0' : $value['filename']);
-				//echo($folder) . '<br>';
-				//print_r($value);
-				//Files data 
-				foreach ($value['files'] as $key2 => $value2)
-				{
-					$filepath = $folder . '/' . $value2['filename'];
-					//images size. We don't need protection, XF should have done that for us :)
-					$sizes = @getimagesize($filepath);
-					//print_r($value2);
-					$avatars[] = array(
-									'folder' => $folder,
-									'filepath' => $filepath,
-									'name' => $value2['name'],
-									'size_width' => $sizes[0],
-									'size_height' => $sizes[1],
-								);
-				}
-			}
-			//print_r($avatars);
-			//echo '</pre>';
-			//save memory is needed
-			unset($temp_avatars);
 			
 			//Now we will copy the members from one table to another. Since it can be intensive to the server, we will do it in small steps..
 			$loop_counter = 0;
@@ -1136,7 +1105,7 @@ switch ($step)
 		break;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 6:
-			//Now we convert PMs
+			//Now we convert Post Attachments
 			echo '<h2>This is the sixth step of the conversion. We will now copy and convert Post Attachments</h2><br>
 				First, let\'s trash the actual contents of SMF "attachments" table....<br>';
 			$result = $smcFunc['db_query']('', '
@@ -1262,11 +1231,12 @@ switch ($step)
 								'height' => $temp2['height'],
 								'downloads' => $temp2['view_count'],
 								'approved' => 1,  
+								'is_avatar' => 0, 
 							);
 							$test = createAttachment($attachmentOptions);
 							if (!$test)
 								$num_copy_errors++;
-							//echo '<pre>' . $test	 . '</pre>';
+							// echo '<pre>' . $test	 . '</pre>';
 							// echo '<pre>';
 							// print_r($attachmentOptions);
 							// echo '</pre>';
@@ -1291,17 +1261,134 @@ switch ($step)
 				if ($num_copy_errors > 0) echo 'Do note, some errors were found while converting files....';
 				echo '<a href="' . $script . '?step=7">Please click here to proceed!</a></h2>';			
 		break;
-		
-		
-		
-		
-		
-		
-		
-		
-		
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////		
 	case 7:
+			//Now we convert User avatars
+			echo '<h2>This is the seventh step of the conversion. We will now copy and convert User Avatars</h2><br>
+				Please make sure that you\'ve reached here from the sixth step (Post Attachments) as both work the same<br>
+				table in SMF\'s structure so it\'s really important the sequence is maintained.<br>';
+
+			echo 'We will now try and fetch all existing avatars datas, from XF\'s data/avatars/l sub-folders<br>
+					It can happen that this results in a huge array. If memory is exceeded, this will need a serious overhaul...<br>';
+
+			//echo memory_get_usage() . "\n";
+					
+			//So, let's gather ALL avatars... nham, memory eater :)
+			$temp_avatars = getAvatars('l',0); //big avatars folder
+			// echo '<pre>';
+			// print_r($temp_avatars);
+			// echo '</pre>';
+			
+			//The array returned from getAvatars is a BIG mess, isn't it? So, let's make this simple
+			$avatars = array();
+			foreach($temp_avatars as $key => $value)
+			{
+				$folder = $xf_dir . '/data/avatars/l/' . ($value['filename'] == 'zzz' ? '0' : $value['filename']);
+				//echo($folder) . '<br>';
+				//print_r($value);
+				//Files data 
+				foreach ($value['files'] as $key2 => $value2)
+				{
+					$filepath = $folder . '/' . $value2['filename'];
+					//images size. We don't need protection, XF should have done that for us :)
+					$sizes = @getimagesize($filepath);
+					//print_r($value2);
+					$avatars[] = array(
+									'folder' => $folder,
+									'filepath' => $filepath,
+									'name' => $value2['name'],
+									'filename' => $value2['filename'],
+									'size_width' => $sizes[0],
+									'size_height' => $sizes[1],
+								);
+				}
+			}
+			// echo '<pre>';
+			// print_r($avatars);
+			// echo '</pre>';
+			//save memory is needed
+			unset($temp_avatars);
+			
+			//Or course this will exceed our "max_queries" so we should honour that
+			$num_avatars = count($avatars);
+			echo 'Now we will start the copy operation.	<b>' . $num_avatars . ' avatars found</b>. Depending on this number of files, this can take some time...';
+			$num_cycles = (int)($num_avatars / $max_queries);
+			if (($num_avatars % $max_queries) != 0)
+				$num_cycles++;
+			$count_cycles = 0;
+			$count_success = 0;
+			$num_rounds = 0;
+			//a div with overflow so that the page won't scroll forever...
+			echo '<div style="width:100%;height:300px;overflow:scroll;">';			
+			//Here's how this works... The "avatars" array is a totally ordered one. So we will just go step by step.
+			//For each entry we work the file. Easy, right? Yeah, sure... :P
+			foreach ($avatars as $key => $value)
+			{
+				// echo '<pre>';
+				// print_r($value);
+				// echo '</pre>';
+				if ($count_cycles == 0)
+					echo 'Passage ' . ($num_rounds + 1) . ' of ' . $num_cycles . '... ';
+				//First: check if the user ID exists in our already imported members database
+				$query = '
+						SELECT COUNT(m.id_member) as total
+						FROM ' . $prefix_smf . 'members AS m
+						WHERE m.id_member = ' . $value['name'];
+				//echo '<pre>' . $query . '</pre>';			
+				$result = $smcFunc['db_query']('', $query
+				);
+				$data = $smcFunc['db_fetch_assoc'] ($result);
+				$num_members = $data['total'];
+				$smcFunc['db_free_result'] ($result);
+				unset ($data);
+				//echo '<pre>' . $num_members . '</pre>';
+				//Now, if this returned anything but 1 member, something is damaged, just skip ahead!
+				if ($num_members != 1)
+					continue;
+				
+
+				// Now that we know that our member exists, we need to hash the file, copy it and update "attachments" table...
+				$attachmentOptions = array(
+					'post' => 0, //No post, of course :)
+					'poster' => $value['name'],
+					'name' => $value['filename'],
+					'tmp_name' => $value['filepath'],
+					'size' => '',							//function createAttachment will take care of this
+					'width' => $value['size_width'],
+					'height' => $value['size_height'],
+					'downloads' => 0,
+					'approved' => 1,
+					'is_avatar' => 1, 
+				);
+				$test = createAttachment($attachmentOptions);
+				// echo '<pre>' . $test . '</pre>';
+				// echo '<pre>';
+				// print_r($attachmentOptions);
+				// echo '</pre>';
+				if (!$test)
+					continue;
+
+				if ($count_cycles == 0)
+					echo 'Done!<br>';
+				$count_success++;
+				//Another way to pause our script every "max_queries"
+				$count_cycles++;
+				if ($count_cycles >= $max_queries)
+				{
+					$count_cycles = 0;
+					$num_rounds++;
+					sleep(1);				
+				}
+
+			}
+				
+			//Finish!!!
+			echo '</div><h2>The script finished moving ' . $count_success . ' attachments from XF to SMF.<br>';
+				//if ($num_copy_errors > 0) echo 'Do note, some errors were found while converting files....';
+				echo '<a href="' . $script . '?step=8">Please click here to proceed!</a></h2>';			
+		break;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	case 8:
 			//We finished, for now.
 			echo '<h2>This is, for now, the end of the conversion. <br>
 					You should now login to your new SMF forum (NOTE: YOU NEED TO RECOVER YOUR PASSWORD!) and go to:</h2><br>
@@ -1322,16 +1409,6 @@ switch ($step)
 		
 }
 
-
-/*
-			$attachmentOptions = array(
-				'post' => isset($_REQUEST['msg']) ? $_REQUEST['msg'] : 0,
-				'poster' => $user_info['id'],
-				'name' => $_FILES['attachment']['name'][$n],
-				'tmp_name' => $_FILES['attachment']['tmp_name'][$n],
-				'size' => $_FILES['attachment']['size'][$n],
-				'approved' => !$modSettings['postmod_active'] || allowedTo('post_attachment'),  
-*/
 
 //Create attachment --> lame copy of the same function in Subs-Post.php
 function createAttachment(&$attachmentOptions)
@@ -1357,7 +1434,10 @@ function createAttachment(&$attachmentOptions)
 		$attachmentOptions['approved'] = 1;
 
 	//$already_uploaded = preg_match('~^post_tmp_' . $attachmentOptions['poster'] . '_\d+$~', $attachmentOptions['tmp_name']) != 0;
-	$already_uploaded = 1; //Of course it is uploaded. We did it! :)
+	if (empty($attachmentOptions['is_avatar'])) //Aren't we an avatar?
+		$already_uploaded = 1; //Of course it is uploaded. We did it! :)
+	else
+		$already_uploaded = 0;
 	$file_restricted = @ini_get('open_basedir') != '' && !$already_uploaded;
 
 	if ($already_uploaded)
@@ -1393,6 +1473,10 @@ function createAttachment(&$attachmentOptions)
 				$attachmentOptions['mime_type'] = 'image/' . $validImageTypes[$size[2]];
 		}
 	}
+	
+	//If we didn't supply this before, do it now.
+	if (empty($attachmentOptions['size']))
+		$attachmentOptions['size'] = @filesize($attachmentOptions['tmp_name']);
 
 	// create an hash for the file. 
 	$attachmentOptions['file_hash'] = sha1(md5($attachmentOptions['name'] . time()) . mt_rand());
@@ -1408,12 +1492,13 @@ function createAttachment(&$attachmentOptions)
 	$smcFunc['db_insert']('',
 		$prefix_smf . 'attachments',
 		array(
-			'id_folder' => 'int', 'id_msg' => 'int', 'filename' => 'string-255', 'file_hash' => 'string-40', 'fileext' => 'string-8',
+			'id_folder' => 'int', 'id_msg' => 'int', 'id_member' => 'int', 'filename' => 'string-255', 'file_hash' => 'string-40', 'fileext' => 'string-8',
 			'size' => 'int', 'width' => 'int', 'height' => 'int',
 			'mime_type' => 'string-20', 'approved' => 'int', 'downloads' => 'int',
 		),
 		array(
-			$id_folder, (int) $attachmentOptions['post'], $attachmentOptions['name'], $attachmentOptions['file_hash'], $attachmentOptions['fileext'],
+			$id_folder, (int) $attachmentOptions['post'], (empty($attachmentOptions['is_avatar']) ? 0 : (int)($attachmentOptions['poster'])),
+			$attachmentOptions['name'], $attachmentOptions['file_hash'], $attachmentOptions['fileext'],
 			(int) $attachmentOptions['size'], (empty($attachmentOptions['width']) ? 0 : (int) $attachmentOptions['width']), (empty($attachmentOptions['height']) ? '0' : (int) $attachmentOptions['height']),
 			(!empty($attachmentOptions['mime_type']) ? $attachmentOptions['mime_type'] : ''), (int) $attachmentOptions['approved'], (int) $attachmentOptions['downloads'],
 		),
@@ -1424,11 +1509,14 @@ function createAttachment(&$attachmentOptions)
 	if (empty($attachmentOptions['id']))
 		return false;
 
-
 	$attachmentOptions['destination'] = getAttachmentFilename(basename($attachmentOptions['name']), $attachmentOptions['id'], $id_folder, false, $attachmentOptions['file_hash']);
 	
 	//Now that we have a name, let's move the original to the hashed one.
-	rename($attachmentOptions['tmp_name'], $attachmentOptions['destination']);
+	if (empty($attachmentOptions['is_avatar']))
+		rename($attachmentOptions['tmp_name'], $attachmentOptions['destination']);
+	else
+		//Let's not move attachments from XF, right? :)
+		copy($attachmentOptions['tmp_name'], $attachmentOptions['destination']);
 
 	// Attempt to chmod it. Not needed, user has to to do...
 	//@chmod($attachmentOptions['destination'], 0644);
@@ -1438,7 +1526,7 @@ function createAttachment(&$attachmentOptions)
 
 	// No security checks for images, XF covered us here, right? :)
 
-	if (!empty($attachmentOptions['skip_thumbnail']) || (empty($attachmentOptions['width']) && empty($attachmentOptions['height'])))
+	if (!empty($attachmentOptions['is_avatar']) || (empty($attachmentOptions['width']) && empty($attachmentOptions['height'])))
 		return true;
 
 	// Like thumbnails, do we?

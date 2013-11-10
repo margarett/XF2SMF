@@ -10,8 +10,8 @@
  * PLEASE NOTE: This is a converter from XenForo 1.2 to SMF 2.0.x. It was created using the database schema from this specific XF version.
 	Please keep in mind that I do *NOT* run any XF forum and, as such, it is possible that something is not exactly the same between your
 	version and what I've used. Just ask!
- * Feel free to redistribute, modify, adapt, improve, whatever you wish. Just respect the (very) permissive license and keep this comment
-	block and respect the (extremely) permissive license.
+ * Feel free to redistribute, modify, adapt, improve, whatever you wish. Just respect the (very) permissive license and keep this small
+	comment block.
  * 
 */
 error_reporting(E_ALL ^ E_DEPRECATED);
@@ -190,6 +190,8 @@ switch ($step)
 				foreach ($members as $key => $value)
 				{
 					$temp_passwd = unserialize($value['passwd']);
+					if (empty($temp_passwd['hash']))
+						$temp_passwd['hash'] = generateRandomString();
 					$data_array[] = array(
 										'id_member' => $value['id_member'],
 										'member_name' => $value['member_name'],
@@ -1387,6 +1389,7 @@ switch ($step)
 				//if ($num_copy_errors > 0) echo 'Do note, some errors were found while converting files....';
 				echo '<a href="' . $script . '?step=8">Please click here to proceed!</a></h2>';			
 		break;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 8:
 			//We finished, for now.
@@ -1688,5 +1691,11 @@ function getAvatars($directory, $level)
 		rename($full_path . '/zzz', $full_path . '/0');
 	return $result;
 } 
+
+
+function generateRandomString($length = 60)
+{
+    return substr(str_shuffle("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0, $length);
+}
 
 ?>

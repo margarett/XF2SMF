@@ -33,7 +33,7 @@ else
 header('Content-Type: text/html; charset=utf-8');
 while (ob_get_level()) ob_end_flush();
 ob_implicit_flush(true);
-
+set_time_limit(0);
 
 $prefix_smf = $db_prefix;
 //echo $prefix_smf;
@@ -46,8 +46,10 @@ $prefix_xf = '`' . $db_name . '`.xf_';
 
 //YOU HAVE TO DEFINE THIS
 $xf_dir = '';
-$max_queries = 10;	//How many queries are we doing at once? There will be a pause after this
+$max_queries = 50;	//How many queries are we doing at once? There will be a pause after this
 					//a big number will hammer your server, a small number might take ages to finish :)
+					
+$automated = false;	//Change to true if you wish the converter to move steps automatically
 
 //THIS IS WHERE YOUR DEFINITIONS END
 
@@ -341,7 +343,15 @@ switch ($step)
 			}
 			//Well, we've finished. YAY :) Let's just say so. Let's move ahead, shall we?
 			echo '</div><h2>The script finished moving ' . $counter . ' members from XF to SMF.<br>
-			<a href="' . $script . '?step=2">Please click here to proceed!</a></h2>';
+			<a href="' . $script . '?step=2">Please click here to proceed!</a><br>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=2\'</script></h2>';
+				die();
+			}
+			echo '</h2>';
 		break;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 2:
@@ -419,8 +429,15 @@ switch ($step)
 
 			//This one was easy. Let's move on to boards!
 			echo '</div><h2>The script finished moving ' . $num_categs . ' categories from XF to SMF.<br>
-			<a href="' . $script . '?step=3">Please click here to proceed!</a></h2>';
-			
+			<a href="' . $script . '?step=3">Please click here to proceed!</a>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=3\'</script></h2>';
+				die();
+			}
+			echo '</h2>';			
 		break;	
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 3:
@@ -636,7 +653,15 @@ switch ($step)
 			unset($data_array);
 			//Uff, this was hard. Let's move on to posts/topics.!
 			echo '</div><h2>The script finished moving ' . $num_boards . ' boards and ' . $num_links . ' "redirect boards" from XF to SMF.<br>
-			<a href="' . $script . '?step=4">Please click here to proceed!</a></h2>';
+			<a href="' . $script . '?step=4">Please click here to proceed!</a>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=4\'</script></h2>';
+				die();
+			}
+			echo '</h2>';			
 		break;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 4:
@@ -920,7 +945,15 @@ switch ($step)
 			}
 
 			echo '</div><h2>The script finished moving ' . $num_topics . ' topics and ' . $num_posts . ' posts from XF to SMF.<br>
-			<a href="' . $script . '?step=5">Please click here to proceed!</a></h2>';
+			<a href="' . $script . '?step=5">Please click here to proceed!</a>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=5\'</script></h2>';
+				die();
+			}
+			echo '</h2>';			
 		break;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 5:
@@ -993,7 +1026,6 @@ switch ($step)
 				// echo '<pre>';
 				// print_r ($messages);
 				// echo '</pre>';
-
 
 				//For each "batch" that we gather we need to dump it to the new table. Shall we?
 				//let's build a nice data array 
@@ -1103,7 +1135,15 @@ switch ($step)
 			sleep(1);			
 
 			echo '</div><h2>The script finished moving ' . $num_messages . ' Private Messages from XF to SMF.<br>
-			<a href="' . $script . '?step=6">Please click here to proceed!</a></h2>';
+			<a href="' . $script . '?step=6">Please click here to proceed!</a>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=6\'</script></h2>';
+				die();
+			}
+			echo '</h2>';			
 		break;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	case 6:
@@ -1258,10 +1298,18 @@ switch ($step)
 					//Nothing gathered, done
 					$done = true;				
 			}
-						
 			echo '</div><h2>The script finished moving ' . $num_attachments . ' attachments from XF to SMF.<br>';
 				if ($num_copy_errors > 0) echo 'Do note, some errors were found while converting files....';
-				echo '<a href="' . $script . '?step=7">Please click here to proceed!</a></h2>';			
+			echo '
+				<a href="' . $script . '?step=7">Please click here to proceed!</a>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=7\'</script></h2>';
+				die();
+			}
+			echo '</h2>';			
 		break;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////		
 	case 7:
@@ -1385,31 +1433,437 @@ switch ($step)
 			}
 				
 			//Finish!!!
-			echo '</div><h2>The script finished moving ' . $count_success . ' attachments from XF to SMF.<br>';
-				//if ($num_copy_errors > 0) echo 'Do note, some errors were found while converting files....';
-				echo '<a href="' . $script . '?step=8">Please click here to proceed!</a></h2>';			
+			echo '</div><h2>The script finished moving ' . $count_success . ' attachments from XF to SMF.<br>
+			<a href="' . $script . '?step=8">Please click here to proceed!</a>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=8\'</script></h2>';
+				die();
+			}
+			echo '</h2>';			
 		break;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////		
 	case 8:
+			//Now we convert Polls
+			echo '<h2>This is the eight step of the conversion. We will now convert Polls</h2><br>
+				First, let\'s trash the actual contents of SMF "polls", "poll_choices" and "log_polls" tables....<br>';
+			//We need to ALTER the "smf_poll_choices" table, in order add a column to store the previous response ID...
+			$test = $smcFunc['db_list_columns'] ($prefix_smf . 'poll_choices');
+			if (!in_array('old_response', $test))
+				$smcFunc['db_add_column']($prefix_smf . 'poll_choices', array('name' => 'old_response', 'size' => 8, 'type' => 'mediumint', 'null' => false));
+			unset($test);
+			$result = $smcFunc['db_query']('', '
+					TRUNCATE TABLE ' . $prefix_smf . 'polls'
+			);
+			$result = $smcFunc['db_query']('', '
+					TRUNCATE TABLE ' . $prefix_smf . 'poll_choices'
+			);
+			$result = $smcFunc['db_query']('', '
+					TRUNCATE TABLE ' . $prefix_smf . 'log_polls'
+			);
+			echo 'Polls cleared from SMF tables. Next step, count what\'s there to move?? <span style="font-weight:bold">';
+			$query = '
+					SELECT COUNT(p.poll_id) as total
+					FROM ' . $prefix_xf . 'poll AS p
+					WHERE p.content_type = \'thread\'';
+			//echo '<pre>' . $query . '</pre>';
+			$result = $smcFunc['db_query']('', $query
+			);
+			$data = $smcFunc['db_fetch_assoc'] ($result);
+			$num_polls = $data['total'];
+			$smcFunc['db_free_result'] ($result);
+			$query = '
+					SELECT COUNT(pr.poll_response_id) as total
+					FROM ' . $prefix_xf . 'poll_response AS pr';
+			//echo '<pre>' . $query . '</pre>';
+			$result = $smcFunc['db_query']('', $query
+			);
+			$data = $smcFunc['db_fetch_assoc'] ($result);
+			$num_poll_responses = $data['total'];
+			$smcFunc['db_free_result'] ($result);			
+			//echo '<pre>' . $num_poll_responses . '</pre>';
+			$query = '
+					SELECT COUNT(pv.user_id) as total
+					FROM ' . $prefix_xf . 'poll_vote AS pv';
+			//echo '<pre>' . $query . '</pre>';
+			$result = $smcFunc['db_query']('', $query
+			);
+			$data = $smcFunc['db_fetch_assoc'] ($result);
+			$num_poll_votes = $data['total'];
+			$smcFunc['db_free_result'] ($result);			
+			//echo '<pre>' . $num_poll_votes . '</pre>';
+			
+			echo $num_polls . ' polls, ' . $num_poll_responses . ' poll responses and ' . $num_poll_votes . ' poll votes were found in XF.</span><br />';
+			//This will, most likely, exceed (by far) the max_queries we defined earlier, so let's go and honour that...
+			$loop_counter = 0;
+			$counter = 0;
+			$num_loops = (int)($num_polls/$max_queries); //complete number of loops
+			$done = false;
+			$now = time(); //We will need to know what day is today for... things :P
+			//a div with overflow so that the page won't scroll forever...
+			echo '<div style="width:100%;height:300px;overflow:scroll;">';
+			while (!$done)
+			{
+				$lower_limit = ($loop_counter * $max_queries); //This is the starting row
+				if ($num_loops > $loop_counter) //is this still a complete set of queries?
+					$upper_limit = $max_queries; //number of rows to return
+				else
+					$upper_limit = $num_polls - ($num_loops * $max_queries); //last trip
+					
+				echo 'Now retrieving polls ' . ($lower_limit + 1) . ' to ' . ($lower_limit + $upper_limit) . '...<br>';	
+				//This is the query to retrieve polls
+				$query = '
+					SELECT
+						p.poll_id AS poll_id,
+						p.content_id AS content_id,
+						p.question AS question,
+						p.voter_count AS voter_count,
+						p.public_votes as public_votes,
+						p.multiple AS multiple,
+						p.close_date AS close_date,
+						pt.user_id AS user_id,
+						pt.username AS username
+					FROM ' . $prefix_xf . 'poll AS p
+						LEFT JOIN ' . $prefix_xf . 'thread AS pt ON (pt.thread_id = p.content_id)
+					WHERE p.content_type = \'thread\'
+					ORDER BY p.poll_id ASC
+					LIMIT ' . $lower_limit . ', ' . $upper_limit;
+				//echo '<pre>' . $query . '</pre>';
+				
+				$request = $smcFunc['db_query']('', $query
+				);
+				$polls = array();
+				while ($row = $smcFunc['db_fetch_assoc']($request))
+				{
+					$polls[] = $row;
+				}
+				// echo '<pre>';
+				// print_r ($polls);
+				// echo '</pre>';
+				$smcFunc['db_free_result']($request);
+
+				//For each "batch" that we gather we need to dump it to the new tables. Shall we?
+				//let's build a nice data array
+				$data_array = array();
+				foreach ($polls as $key => $value)
+				{
+					// echo '<pre>';
+					// print_r ($value);
+					// echo '</pre>';
+					
+					//We need do do a LOT of things here. And I've never used polls in my life :P
+					//First, update the topic with the poll ID information...
+					$smcFunc['db_query']('', '
+						UPDATE ' . $prefix_smf . 'topics
+						SET id_poll = ' . $value['poll_id'] . '
+						WHERE id_topic = ' . $value['content_id']
+					);
+					//Now, XF doesn't allow to lock a poll without locking the topic, so it seems.
+					//Right now we'll just leave it locked to topic or not, because that's also how it works in XF. Nothing to do, here :P
+					
+					//Next, XF also doesn't allow to choose how many replies a user can give to a poll. But SMF does. Fortunately, SMF is smart and it will
+					//limit this stupid big number :)
+					if (empty($value['multiple']))
+						$max_votes = 99;
+					else
+						$max_votes = 1;
+						
+					//And we add to our beautiful data array :P
+					$temp = array(
+						'id_poll' => $value['poll_id'],
+						'question' => $value['question'],
+						'voting_locked' => 0,
+						'max_votes' => $max_votes,
+						'expire_time' => $value['close_date'],
+						'hide_results' => 0, //Didn't find that option in XF...
+						'change_vote' => 0, //also not
+						'guest_vote' => 0, //also not
+						'num_guest_voters' => 0, //sorry bub
+						'reset_poll' => 0,
+						'id_member' => $value['user_id'],
+						'poster_name' => $value['username'],
+					);
+					$data_array[] = $temp;
+
+				}
+				// echo '<pre>';
+				// print_r ($data_array);
+				// echo '</pre>';				
+				//All is good, to the database you go!
+				$smcFunc['db_insert']('insert',
+					$prefix_smf . 'polls',
+					array(
+							'id_poll' => 'int',
+							'question' => 'string',
+							'voting_locked' => 'int',
+							'max_votes' => 'int',
+							'expire_time' => 'int',
+							'hide_results' => 'int',
+							'change_vote' => 'int',
+							'guest_vote' => 'int',
+							'num_guest_voters' => 'int',
+							'reset_poll' => 'int',
+							'id_member' => 'int',
+							'poster_name' => 'string',
+						),
+					$data_array,
+					array('id_poll')
+				);
+				
+				//flush you!
+				unset($data_array);
+				unset($polls);
+				$loop_counter++; //There ya go, now increase the loop counter
+				$counter += $upper_limit; //increase the elements counter. Don't forget we added "1" to lower limit!
+				
+				//Did we finish or WHAT?!
+				if ($counter >= $num_polls)
+					$done = true;
+				else
+					sleep(1);				
+			}				
+			//We finished polls... Next --> poll responses... Oh well...
+			sleep(1);
+			//This will, most likely, exceed (by far) the max_queries we defined earlier, so let's go and honour that...
+			$loop_counter = 0;
+			$counter = 0;
+			$num_loops = (int)($num_polls/$max_queries); //complete number of loops
+			$done = false;
+			while (!$done)
+			{
+				$lower_limit = ($loop_counter * $max_queries); //This is the starting row
+				if ($num_loops > $loop_counter) //is this still a complete set of queries?
+					$upper_limit = $max_queries; //number of rows to return
+				else
+					$upper_limit = $num_polls - ($num_loops * $max_queries); //last trip
+				echo 'Now retrieving poll responses from polls ' . ($lower_limit + 1) . ' to ' . ($lower_limit + $upper_limit) . '...<br>';	
+				$poll_responses = array();
+				//Ahhh, why isn't this ever easy :P
+				//Get $max queries of poll ids
+				$query = '
+					SELECT
+						pr.poll_id AS poll_id
+					FROM ' . $prefix_xf . 'poll_response AS pr
+						LEFT JOIN ' . $prefix_xf . 'poll AS p ON (pr.poll_id = p.poll_id)
+					WHERE p.content_type = \'thread\'
+					GROUP BY pr.poll_id
+					ORDER BY pr.poll_response_id ASC
+					LIMIT ' . $lower_limit . ', ' . $upper_limit;
+				//echo '<pre>' . $query . '</pre>';
+				$request = $smcFunc['db_query']('', $query
+				);
+
+				while ($row = $smcFunc['db_fetch_assoc']($request))
+				{
+					$poll_responses[] = $row;
+				}
+				// echo '<pre>';
+				// print_r ($poll_responses);
+				// echo '</pre>';
+				$smcFunc['db_free_result']($request);
+				//Build an array of simple poll IDs...
+				$poll_ids = array();
+				foreach ($poll_responses as $key => $value)
+					$poll_ids[] = $value['poll_id'];
+				unset($poll_responses);
+				$poll_responses = array();
+				//Now, we get the responses for those specific poll_ids.
+				$query = '
+					SELECT
+						pr.poll_response_id AS poll_response_id,
+						pr.poll_id AS poll_id,
+						pr.response AS response,
+						pr.response_vote_count AS response_vote_count
+					FROM ' . $prefix_xf . 'poll_response AS pr
+					WHERE pr.poll_id IN ({array_int:list_polls})';
+				$request = $smcFunc['db_query']('', $query ,
+					array(
+						'list_polls' => $poll_ids,
+					)
+				);
+				while ($row = $smcFunc['db_fetch_assoc']($request))
+					$poll_responses[] = $row;
+				// echo '<pre>';
+				// print_r ($poll_responses	);
+				// echo '</pre>';
+				$smcFunc['db_free_result']($request);
+				//For each "batch" that we gather we need to dump it to the new tables. Shall we?
+				//let's build a nice data array
+				$data_array = array();
+				$response_id = 0;
+				$old_poll_id = 0;
+				$temp_choice_id = 0;
+				foreach ($poll_responses as $key => $value)
+				{
+	
+					//A little trick to convert the choice id. Again, why this have to be so different? Blame SMF here, for not having an AI id_choice...
+					if ($old_poll_id != $value['poll_id']) //Change in poll ID
+					{
+						$temp_choice_id = 0;
+						$old_poll_id = $value['poll_id'];
+					}
+					else
+						$temp_choice_id++;
+					
+					//And we add to our beautiful data array :P
+					$temp = array(
+						'id_poll' => $value['poll_id'],
+						'id_choice' => $temp_choice_id,
+						'label' => $value['response'],
+						'votes' => $value['response_vote_count'],
+						'old_response' => $value['poll_response_id'],
+					);
+					$data_array[] = $temp;
+				}
+				unset($poll_responses);
+				unset($poll_ids);
+				// echo '<pre>';
+				// print_r ($data_array);
+				// echo '</pre>';				
+				//All is good, to the database you go!
+				$smcFunc['db_insert']('insert',
+					$prefix_smf . 'poll_choices',
+					array(
+							'id_poll' => 'int',
+							'id_choice' => 'int',
+							'label' => 'string',
+							'votes' => 'int',
+							'old_response' => 'int',
+						),
+					$data_array,
+					array()
+				);
+				unset($data_array);
+				$loop_counter++; //There ya go, now increase the loop counter
+				$counter += $upper_limit; //increase the elements counter. Don't forget we added "1" to lower limit!
+				
+				//Did we finish or WHAT?!
+				if ($counter >= $num_polls)
+					$done = true;
+				else
+					sleep(1);		
+			}
+
+			//Now, for votes... Jeez!
+			sleep(1);
+			//Same old, same old...
+			$loop_counter = 0;
+			$counter = 0;
+			$num_loops = (int)($num_poll_votes/$max_queries); //complete number of loops
+			$done = false;
+			while(!$done)
+			{
+				$lower_limit = ($loop_counter * $max_queries); //This is the starting row
+				if ($num_loops > $loop_counter) //is this still a complete set of queries?
+					$upper_limit = $max_queries; //number of rows to return
+				else
+					$upper_limit = $num_poll_votes - ($num_loops * $max_queries); //last trip
+				echo 'Now retrieving poll votes ' . ($lower_limit + 1) . ' to ' . ($lower_limit + $upper_limit) . '...<br>';			
+				//This is the query to retrieve poll votes
+				$query = '
+					SELECT
+						pv.user_id AS user_id,
+						pv.poll_response_id AS poll_response_id,
+						pv.poll_id AS poll_id,
+						pc.old_response AS old_response,
+						pc.id_choice AS id_choice
+					FROM ' . $prefix_xf . 'poll_vote AS pv
+						LEFT JOIN ' . $prefix_smf . 'poll_choices AS pc ON (pv.poll_response_id = pc.old_response)
+					ORDER BY pv.poll_response_id ASC
+					LIMIT ' . $lower_limit . ', ' . $upper_limit;
+				//echo '<pre>' . $query . '</pre>';
+				
+				$request = $smcFunc['db_query']('', $query
+				);
+				$poll_votes = array();
+				while ($row = $smcFunc['db_fetch_assoc']($request))
+					$poll_votes[] = $row;
+				// echo '<pre>';
+				// print_r ($poll_votes);
+				// echo '</pre>';
+				$smcFunc['db_free_result']($request);				
+			
+				$data_array = array();
+				foreach ($poll_votes as $key => $value)
+				{
+	
+					//A little trick to convert the choice id. Again, why this have to be so different? Blame SMF here, for not having an AI id_choice...
+					if ($old_poll_id != $value['poll_id']) //Change in poll ID
+					{
+						$temp_choice_id = 0;
+						$old_poll_id = $value['poll_id'];
+					}
+					else
+						$temp_choice_id++;
+					
+					//And we add to our beautiful data array :P
+					$temp = array(
+						'id_poll' => $value['poll_id'],
+						'id_member' => $value['user_id'],
+						'id_choice' => $value['id_choice'],
+					);
+					$data_array[] = $temp;
+				}
+				unset($poll_votes);
+				// echo '<pre>';
+				// print_r ($data_array);
+				// echo '</pre>';				
+				//All is good, to the database you go!
+				$smcFunc['db_insert']('insert',
+					$prefix_smf . 'log_polls',
+					array(
+							'id_poll' => 'int',
+							'id_member' => 'int',
+							'id_choice' => 'string',
+						),
+					$data_array,
+					array()
+				);
+				unset($data_array);			
+
+				$loop_counter++; //There ya go, now increase the loop counter
+				$counter += $upper_limit; //increase the elements counter. Don't forget we added "1" to lower limit!
+				
+				//Did we finish or WHAT?!
+				if ($counter >= $num_poll_votes)
+					$done = true;
+				else
+					sleep(1);		
+			
+			}
+			
+			
+			//Finish!!!
+			//Remove the temporary column created for the old response ID in poll_choices
+			//$smcFunc['db_remove_column']($prefix_smf . 'poll_choices', 'old_response');
+			echo '</div><h2>The script finished moving Polls/Responses/Votes from XF to SMF.<br>
+			<a href="' . $script . '?step=9">Please click here to proceed!</a>';
+			if ($automated)
+			{
+				echo ' Or wait 5 seconds to proceed automatically';
+				sleep(5);
+				echo '<script>window.location = \'' . $script . '?step=9\'</script></h2>';
+				die();
+			}
+			echo '</h2>';			
+		break;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	case 9:
 			//We finished, for now.
 			echo '<h2>This is, for now, the end of the conversion. <br>
 					You should now login to your new SMF forum (NOTE: YOU NEED TO RECOVER YOUR PASSWORD!) and go to:</h2><br>
 					--> ACP --> Maintenance --> Recount all forum totals and statistics<br><br>
 					This will update your forum totals.<br><br>
 					<h2><a href="' . $boardurl . '/index.php">Please click here to proceed!</a></h2>';
-
-
 		break;
-
-		
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	default:
 			echo '<h1>Ups, something went wrong, wou\'re not supposed to be here. Please start over...</h1><br>
 					<h2><a href="' . $script . '">Please click here</a>';
 	
 		break;
-		
 }
 
 

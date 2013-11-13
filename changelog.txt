@@ -1,3 +1,7 @@
+Version 1.00 // 13-11-2013
+================================================================================
++ Added import for polls
+
 Version 0.14 // 26-10-2013
 ================================================================================
 ! Fixed possible issue with password not stored as initially expected
